@@ -1,0 +1,42 @@
+# Repo-Vault Mapping Configuration
+#
+# This file maps Obsidian vault folders to local git repositories,
+# GitHub repos, and Jira projects. The agent uses this to connect
+# your Second Brain notes to your active development work.
+#
+# Usage:
+#   1. Copy this file to `repo_mapping.yaml`
+#   2. Update the paths and identifiers for your projects
+#   3. Run: obsidian-mcp --load-mappings
+
+mappings:
+  # Example: OVI Project
+  - vault_path: "10_Projects/OVI"
+    repo_path: "~/Projects/dev/ovi"
+    github: "anomalyco/ovi"
+    jira_project: null
+    description: "One Vault Interface - Knowledge management system"
+    active: true
+
+  # Example: Accurkardia
+  - vault_path: "10_Projects/Accurkardia"
+    repo_path: "~/Projects/dev/accurkardia"
+    github: "anomalyco/accurkardia"
+    jira_project: "AK"
+    description: "Cardiac monitoring platform"
+    active: true
+
+  # Example: Personal Dev Dashboard (no Jira)
+  - vault_path: "10_Projects/Personal Dev Dashboard"
+    repo_path: "~/Projects/dev/personal-dashboard"
+    github: null
+    jira_project: null
+    description: "Personal productivity tracking dashboard"
+    active: false
+
+# Notes:
+# - vault_path: Relative to vault root (e.g., "10_Projects/MyProject")
+# - repo_path: Absolute path or ~/ path to local git repo
+# - github: Format "owner/repo" or null if not on GitHub
+# - jira_project: Jira project key (e.g., "AK", "OVI") or null
+# - active: Set to false to ignore inactive projects
