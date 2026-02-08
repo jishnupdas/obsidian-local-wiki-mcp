@@ -34,7 +34,7 @@ DB_PATH = _get_path("DB_PATH", "~/Projects/project-sb/.obsidian/vault_graph.db")
 # INDEXER SETTINGS
 # =============================================================================
 
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
 BATCH_SIZE = _get_int("BATCH_SIZE", 25000)  # Characters per batch
 
 # Paths to exclude from indexing (relative to vault root)

@@ -30,6 +30,7 @@ from .repo_manager import load_mappings_from_yaml, verify_mapping
 from .onboarding import onboard_project_logic, update_project_index
 from .strategy import generate_daily_strategy_logic
 from .gaps import analyze_gaps_logic
+from .deep_onboard import deep_onboard_logic
 from .pulse import (
     gather_git_info,
     gather_github_info,
@@ -539,6 +540,21 @@ def analyze_gaps(project_name: str | None = None) -> str:
     return analyze_gaps_logic(project_name)
 
 
+@mcp.tool()
+def deep_onboard(repo_path: str, project_name: str | None = None, force: bool = False) -> str:
+    """
+    Perform an autonomous deep onboarding of a local repository.
+    Categorizes the project, explores code, creates/updates vault notes,
+    and integrates concepts.
+
+    Args:
+        repo_path: Path to the local git repository
+        project_name: Optional name (defaults to folder name)
+        force: Set to True to apply changes (otherwise returns proposal)
+    """
+    return deep_onboard_logic(repo_path, project_name, force)
+
+
 # =============================================================================
 # CLI ENTRYPOINT
 # =============================================================================
@@ -563,6 +579,7 @@ Examples:
   obsidian-mcp --pulse "10_Projects/Accurkardia" # Run project pulse scan
   obsidian-mcp --strategy         # Generate Daily Strategy note
   obsidian-mcp --gaps             # Run gap analysis
+  obsidian-mcp --deep-onboard "." # Deep onboard current directory
 """,
     )
 
@@ -573,6 +590,11 @@ Examples:
         "--full",
         action="store_true",
         help="Force full rebuild when indexing (ignore timestamps and content hashes)",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Force execution for tools like deep-onboard",
     )
     parser.add_argument(
         "--limit",
@@ -609,6 +631,11 @@ Examples:
         "--gaps",
         action="store_true",
         help="Run gap analysis (broken links, stubs, orphans)",
+    )
+    parser.add_argument(
+        "--deep-onboard",
+        metavar="PATH",
+        help="Run deep onboarding for a repository path",
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
 
@@ -659,6 +686,19 @@ Examples:
     if args.gaps:
         init_db()
         print(analyze_gaps())
+        return
+
+    # Deep onboard
+    if args.deep_onboard:
+        init_db()
+        # For CLI, we might want to default force=True if user confirms,
+        # but for safety, let's just print the proposal first unless --force flag is added?
+        # Current argparse structure doesn't easily support a separate --force flag for this specific command without global pollution.
+        # Let's assume CLI usage implies intent, OR we print the proposal.
+        # Actually, let's just run it with force=False first to show the proposal.
+        # User can add a --force flag if we added one.
+        # Let's add a global --force flag.
+        print(deep_onboard(args.deep_onboard, force=getattr(args, "force", False)))
         return
 
     # Run indexer
