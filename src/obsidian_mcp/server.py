@@ -698,6 +698,23 @@ Examples:
         metavar="PROMPT",
         help="Run ContextEngine hook (outputs JSON)",
     )
+    parser.add_argument(
+        "--search",
+        metavar="QUERY",
+        help="Search the vault and print results (uses hybrid search)",
+    )
+    parser.add_argument(
+        "--semantic",
+        action="store_true",
+        default=True,
+        help="Include semantic search results (default: True)",
+    )
+    parser.add_argument(
+        "--no-semantic",
+        action="store_false",
+        dest="semantic",
+        help="Disable semantic search results",
+    )
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
 
     args = parser.parse_args()
@@ -711,6 +728,12 @@ Examples:
     if args.stats:
         init_db()
         print(tools.vault_stats())
+        return
+
+    # Search and exit
+    if args.search:
+        init_db()
+        print(tools.search_vault(args.search, include_semantic=args.semantic))
         return
 
     # Load repo mappings
