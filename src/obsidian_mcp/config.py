@@ -52,6 +52,14 @@ JOURNAL_FOLDER = os.getenv("JOURNAL_FOLDER", "50_Journal")
 JOURNAL_DATE_FORMAT = os.getenv("JOURNAL_DATE_FORMAT", "%Y-%m-%d")
 
 # =============================================================================
+# VECTOR SEARCH SETTINGS
+# =============================================================================
+
+VECTOR_MODEL = os.getenv("VECTOR_MODEL", "BAAI/bge-small-en-v1.5")
+VECTOR_CHUNK_SIZE = _get_int("VECTOR_CHUNK_SIZE", 1500)    # chars per chunk
+VECTOR_CHUNK_OVERLAP = _get_int("VECTOR_CHUNK_OVERLAP", 200)  # overlap between chunks
+
+# =============================================================================
 # TEMPLATE PATHS (relative to vault root)
 # =============================================================================
 
@@ -108,16 +116,22 @@ CONFIG = {
     "templates": TEMPLATES,
     "journal_folder": JOURNAL_FOLDER,
     "journal_date_format": JOURNAL_DATE_FORMAT,
+    "vector_model": VECTOR_MODEL,
+    "vector_chunk_size": VECTOR_CHUNK_SIZE,
+    "vector_chunk_overlap": VECTOR_CHUNK_OVERLAP,
 }
 
 
 def print_config():
     """Print current configuration for debugging."""
     print("=== Obsidian MCP Configuration ===")
-    print(f"  Vault Path:    {VAULT_PATH}")
-    print(f"  Database:      {DB_PATH}")
-    print(f"  Gemini Model:  {GEMINI_MODEL}")
-    print(f"  Batch Size:    {BATCH_SIZE} chars")
-    print(f"  Journal:       {JOURNAL_FOLDER}/")
-    print(f"  Excluded:      {', '.join(EXCLUDE_PATTERNS)}")
-    print(f"  Relations:     {len(RELATIONSHIP_TYPES)} types")
+    print(f"  Vault Path:      {VAULT_PATH}")
+    print(f"  Database:        {DB_PATH}")
+    print(f"  Gemini Model:    {GEMINI_MODEL}")
+    print(f"  Batch Size:      {BATCH_SIZE} chars")
+    print(f"  Journal:         {JOURNAL_FOLDER}/")
+    print(f"  Excluded:        {', '.join(EXCLUDE_PATTERNS)}")
+    print(f"  Relations:       {len(RELATIONSHIP_TYPES)} types")
+    print(f"  Vector Model:    {VECTOR_MODEL}")
+    print(f"  Chunk Size:      {VECTOR_CHUNK_SIZE} chars")
+    print(f"  Chunk Overlap:   {VECTOR_CHUNK_OVERLAP} chars")

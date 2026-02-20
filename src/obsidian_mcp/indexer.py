@@ -31,7 +31,9 @@ from .db import (
     get_stats,
     get_last_index_time,
     set_last_index_time,
+    upsert_note_chunks,
 )
+from . import vectors
 
 
 # =============================================================================
@@ -375,6 +377,16 @@ def build_index(
             # Always update note metadata
             upsert_note(filename, rel_path, title, folder, content_hash, content)
 
+            # Compute and store chunk embeddings for the full note content
+            if vectors.is_available():
+                try:
+                    chunks = vectors.chunk_text(content)
+                    embeddings = vectors.embed_batch(chunks)
+                    upsert_note_chunks(filename, embeddings)
+                except Exception as e:
+                    if verbose:
+                        print(f"  ⚠️  Vector embedding failed for {filename}: {e}")
+
             # Extract native wikilinks (no LLM needed)
             wikilinks = extract_wikilinks(content)
             clear_edges_for_note(filename)
@@ -505,6 +517,16 @@ def index_single_note(filepath: str | Path, verbose: bool = False) -> dict | Non
 
         # Update note record
         upsert_note(filename, rel_path, title, folder, content_hash, content)
+
+        # Compute and store chunk embeddings for the full note content
+        if vectors.is_available():
+            try:
+                chunks = vectors.chunk_text(content)
+                embeddings = vectors.embed_batch(chunks)
+                upsert_note_chunks(filename, embeddings)
+            except Exception as e:
+                if verbose:
+                    print(f"  ⚠️  Vector embedding failed for {filename}: {e}")
 
         # Extract wikilinks
         wikilinks = extract_wikilinks(content)

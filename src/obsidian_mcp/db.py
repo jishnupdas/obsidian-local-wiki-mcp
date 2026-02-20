@@ -18,6 +18,28 @@ from typing import Generator
 
 from .config import DB_PATH
 
+# Lazy import — only used when sqlite-vec is installed
+_sqlite_vec_loaded = False
+
+
+def _try_load_sqlite_vec(conn: sqlite3.Connection) -> bool:
+    """
+    Attempt to load the sqlite-vec extension into an open connection.
+
+    Returns True on success, False if the extension is not installed.
+    """
+    global _sqlite_vec_loaded
+    try:
+        import sqlite_vec
+
+        conn.enable_load_extension(True)
+        sqlite_vec.load(conn)
+        conn.enable_load_extension(False)
+        _sqlite_vec_loaded = True
+        return True
+    except (ImportError, Exception):
+        return False
+
 # =============================================================================
 # SCHEMA
 # =============================================================================
@@ -96,6 +118,17 @@ CREATE INDEX IF NOT EXISTS idx_repo_vault_path ON repo_mappings(vault_path);
 CREATE INDEX IF NOT EXISTS idx_repo_active ON repo_mappings(active);
 """
 
+# Vector schema — applied separately only when sqlite-vec is available
+VECTOR_SCHEMA = """
+-- Note embeddings: one row per chunk per note
+-- Multiple chunks per note allow full-document semantic coverage
+CREATE VIRTUAL TABLE IF NOT EXISTS note_embeddings USING vec0(
+    filename     TEXT,
+    chunk_index  INTEGER,
+    embedding    FLOAT[384]
+);
+"""
+
 
 # =============================================================================
 # CONNECTION MANAGEMENT
@@ -109,6 +142,8 @@ def get_db() -> Generator[sqlite3.Connection, None, None]:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # Load sqlite-vec extension if available (must be done per-connection)
+    _try_load_sqlite_vec(conn)
     try:
         yield conn
         conn.commit()
@@ -123,6 +158,8 @@ def init_db() -> None:
     """Initialize database schema."""
     with get_db() as conn:
         conn.executescript(SCHEMA)
+    # Apply vector schema separately (requires sqlite-vec extension)
+    init_vector_schema()
 
 
 # =============================================================================
@@ -564,3 +601,119 @@ def clear_repo_mappings() -> None:
     """Clear all repo mappings (useful before reload)."""
     with get_db() as conn:
         conn.execute("DELETE FROM repo_mappings")
+
+
+# =============================================================================
+# VECTOR OPERATIONS (sqlite-vec)
+# =============================================================================
+
+
+def init_vector_schema() -> None:
+    """
+    Create the note_embeddings virtual table if sqlite-vec is available.
+
+    Safe to call even when sqlite-vec is not installed — silently skips.
+    """
+    try:
+        with get_db() as conn:
+            conn.executescript(VECTOR_SCHEMA)
+    except Exception:
+        # sqlite-vec not loaded or other error — skip silently
+        pass
+
+
+def upsert_note_chunks(filename: str, embeddings: list[list[float]]) -> None:
+    """
+    Store chunk embeddings for a note, replacing any previous chunks.
+
+    Deletes existing rows for ``filename`` first, then inserts one row
+    per chunk so the store always reflects the current note content.
+
+    Args:
+        filename:   Note filename (e.g., "My_Note.md").
+        embeddings: List of 384-dim embeddings, one per chunk.
+    """
+    if not embeddings:
+        return
+
+    with get_db() as conn:
+        # Remove stale chunks for this note
+        conn.execute("DELETE FROM note_embeddings WHERE filename = ?", (filename,))
+
+        # Insert fresh chunk rows
+        for chunk_index, embedding in enumerate(embeddings):
+            import struct
+
+            # sqlite-vec expects a raw binary blob for FLOAT[384] columns
+            blob = struct.pack(f"{len(embedding)}f", *embedding)
+            conn.execute(
+                "INSERT INTO note_embeddings(filename, chunk_index, embedding) VALUES (?, ?, ?)",
+                (filename, chunk_index, blob),
+            )
+
+
+def search_vectors(query_embedding: list[float], limit: int = 10) -> list[dict]:
+    """
+    Find notes whose chunks are closest to query_embedding.
+
+    Deduplicates by filename: when a note has multiple chunks, only the
+    chunk with the smallest distance is kept. This means the caller always
+    gets at most one result per note.
+
+    Args:
+        query_embedding: 384-dim query vector.
+        limit:           Max number of *distinct* notes to return.
+
+    Returns:
+        List of dicts: [{filename, chunk_index, distance}], best match first.
+    """
+    import struct
+
+    blob = struct.pack(f"{len(query_embedding)}f", *query_embedding)
+
+    # Fetch more candidates than limit to allow deduplication
+    fetch_limit = limit * 5
+
+    with get_db() as conn:
+        try:
+            rows = conn.execute(
+                """
+                SELECT filename, chunk_index, distance
+                FROM note_embeddings
+                WHERE embedding MATCH ?
+                ORDER BY distance
+                LIMIT ?
+                """,
+                (blob, fetch_limit),
+            ).fetchall()
+        except Exception:
+            return []
+
+    # Deduplicate: keep best (lowest) distance per filename
+    seen: dict[str, dict] = {}
+    for row in rows:
+        fn = row["filename"]
+        if fn not in seen or row["distance"] < seen[fn]["distance"]:
+            seen[fn] = dict(row)
+
+    # Sort by distance and return top `limit` results
+    results = sorted(seen.values(), key=lambda r: r["distance"])
+    return results[:limit]
+
+
+def get_vector_count() -> int:
+    """
+    Return the number of notes with at least one embedding stored.
+
+    Counts distinct filenames (not raw chunk rows) so the number
+    reflects note coverage rather than chunk count.
+    """
+    with get_db() as conn:
+        try:
+            row = conn.execute(
+                "SELECT COUNT(DISTINCT filename) as cnt FROM note_embeddings"
+            ).fetchone()
+            return row["cnt"] if row else 0
+        except Exception:
+            return 0
+

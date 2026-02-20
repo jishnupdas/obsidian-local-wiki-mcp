@@ -241,32 +241,35 @@ Consider Tavily/Serper API integration once Phases 1-2 are mature.
 
 ### 4.0 Vector / Semantic Search _(NEW)_
 
-**Status:** 🟡 Proposed — Awaiting Approval
+**Status:** 🟡 In Progress
 
 > [!NOTE]
 > See: `VECTOR_SEARCH_PROPOSAL.md`
 
 **Description:**
 
-- Add local vector search using **ChromaDB** + **SentenceTransformers** (`all-MiniLM-L6-v2`)
-- New module `vectors.py`: `get_chroma_client()`, `upsert_embedding()`, `search_vectors()`
-- Integrates into `indexer.py` (compute embeddings on index) and `search_vault` (new semantic results category)
-- Enables finding conceptually related notes even without keyword overlap
+- Add local vector search using **sqlite-vec** + **fastembed** (`BAAI/bge-small-en-v1.5`)
+- Full-document coverage via overlapping chunking (1500-char windows, 200-char overlap)
+- New module `vectors.py`: `is_available()`, `get_model()`, `chunk_text()`, `embed()`, `embed_batch()`
+- `db.py` extended: `note_embeddings` virtual table (sqlite-vec), `upsert_note_chunks()`, `search_vectors()`, `get_vector_count()`
+- Integrates into `indexer.py` (compute + store chunk embeddings on index) and `search_vault` (new `=== SEMANTIC MATCHES ===` category)
+- Install with: `pip install -e ".[vector]"`
 
 **Trade-offs:**
 | Pros | Cons |
 |:---|:---|
-| True semantic understanding | +500MB dependencies (`torch`, `chromadb`) |
-| Zero API cost (local embeddings) | Slower initial indexing |
-| Full privacy — data stays local | Additional DB state to manage |
+| True semantic understanding | ~85MB download (ONNX model + fastembed) |
+| Zero API cost (local ONNX inference) | Slightly slower indexing per note |
+| No PyTorch required (ONNX runtime) | Chunking adds multiple DB rows per note |
+| Full privacy — data stays local | |
 
 **Deliverables:**
 
-- [ ] `src/obsidian_mcp/vectors.py`
-- [ ] ChromaDB persistence in `VAULT_PATH/.obsidian/chroma_db/`
-- [ ] `search_vault` semantic mode flag
-- [ ] Lazy migration for existing vaults
-- [ ] `vector_store_size` in `vault_stats`
+- [x] `src/obsidian_mcp/vectors.py`
+- [x] `note_embeddings` virtual table in existing `vault.db` (sqlite-vec)
+- [x] `search_vault` `include_semantic` flag
+- [x] Full-document chunking (no truncation)
+- [x] `vector_store_size` in `vault_stats`
 
 ---
 
@@ -315,7 +318,7 @@ Chain-of-thought reasoning across multiple vault notes with full citation tracki
 
 10. Drafting Loop (2.3)
 11. Activity Logging Hook (2.5.2)
-12. Vector Search (4.0) — Decide: approve or defer the proposal
+12. Vector Search (4.0) — 🟡 In Progress (chunked sqlite-vec implementation)
 
 ### 🗓️ Medium-Term (1-3 months)
 
@@ -418,7 +421,7 @@ Chain-of-thought reasoning across multiple vault notes with full citation tracki
 
 4. **Versioning**: Should agent-generated notes include a version history?
 
-5. **Vector Search**: Approve the ChromaDB proposal or explore lighter alternatives?
+5. **Vector Search**: Implemented with sqlite-vec + fastembed. Not using ChromaDB.
 
 6. **Hook Scope**: Should the `AfterTool` hook auto-log, or always prompt? What's the trust threshold?
 

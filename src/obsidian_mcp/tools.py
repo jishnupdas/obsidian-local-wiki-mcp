@@ -24,7 +24,10 @@ from .db import (
     get_stats,
     get_orphan_notes,
     get_most_connected,
+    search_vectors,
+    get_vector_count,
 )
+from . import vectors
 
 
 # =============================================================================
@@ -85,16 +88,21 @@ def _find_all_note_paths(filename: str) -> list[Path]:
 
 
 def search_vault(
-    query: str, include_graph: bool = True, include_fts: bool = True, limit: int = 10
+    query: str,
+    include_graph: bool = True,
+    include_fts: bool = True,
+    include_semantic: bool = True,
+    limit: int = 10,
 ) -> str:
     """
-    Hybrid search across vault: ripgrep text matches + SQLite FTS + knowledge graph.
+    Hybrid search across vault: ripgrep text matches + SQLite FTS + knowledge graph + semantic.
 
     Args:
-        query: Search term or phrase
-        include_graph: Include knowledge graph connections
-        include_fts: Include full-text search results
-        limit: Max results per category
+        query:            Search term or phrase
+        include_graph:    Include knowledge graph connections
+        include_fts:      Include full-text search results
+        include_semantic: Include vector-based semantic matches (when available)
+        limit:            Max results per category
 
     Returns:
         Formatted search results with file paths and context
@@ -161,6 +169,21 @@ def search_vault(
                     results.append(f"- {e['source']} --[{e['relation']}]--> {e['target']}{claim}")
         except Exception as e:
             results.append(f"[Graph error: {e}]")
+
+    # 4. Semantic / vector search
+    if include_semantic and vectors.is_available():
+        try:
+            query_emb = vectors.embed(query)
+            semantic_results = search_vectors(query_emb, limit)
+            if semantic_results:
+                results.append("\n=== SEMANTIC MATCHES ===")
+                for r in semantic_results:
+                    # sqlite-vec returns cosine distance (0 = identical, 2 = opposite)
+                    # Convert to a 0-1 similarity score for display
+                    similarity = max(0.0, 1.0 - r["distance"] / 2.0)
+                    results.append(f"- {r['filename']} (similarity: {similarity:.2f})")
+        except Exception as e:
+            results.append(f"[Semantic search error: {e}]")
 
     if not results:
         return f"No results found for '{query}'."
@@ -747,8 +770,17 @@ def vault_stats() -> str:
         f"📄 Total Notes:  {stats['total_notes']}",
         f"🔗 Total Edges:  {stats['total_edges']}",
         f"💡 Total Claims: {stats['total_claims']}",
-        "",
     ]
+
+    # Vector store count (only when sqlite-vec installed)
+    if vectors.is_available():
+        try:
+            v_count = get_vector_count()
+            result.append(f"🧬 Vector Store: {v_count} notes embedded")
+        except Exception:
+            pass
+
+    result.append("")
 
     # Folder distribution
     if stats.get("folders"):
