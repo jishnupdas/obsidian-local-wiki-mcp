@@ -130,26 +130,56 @@ class ContextEngine:
 
         return "\n".join(context_lines)
 
+    def get_semantic_context(self, prompt: str, limit: int = 5) -> str | None:
+        """
+        Embed the prompt and return top semantically similar notes from the vault.
+
+        Returns None when vector deps are not installed (graceful degradation).
+        """
+        from . import vectors
+
+        if not vectors.is_available():
+            return None
+
+        try:
+            from .db import search_vectors
+
+            query_emb = vectors.embed(prompt)
+            results = search_vectors(query_emb, limit)
+            if not results:
+                return None
+
+            lines = ["**Semantically Related Notes:**"]
+            for r in results:
+                # sqlite-vec cosine distance: 0 = identical, 2 = opposite
+                similarity = max(0.0, 1.0 - r["distance"] / 2.0)
+                lines.append(f"- [[{r['filename']}]] (similarity: {similarity:.2f})")
+            return "\n".join(lines)
+        except Exception:
+            return None
+
     def get_context(self, prompt: str) -> str:
         """
         Orchestrate context gathering.
         Returns JSON string for Gemini CLI hook output.
         """
         projects = self.extract_keywords(prompt)
-        
-        if not projects:
-             return json.dumps({"hookSpecificOutput": {"additionalContext": ""}})
-             
+
         briefings = []
         for p in projects:
             briefings.append(self.get_tactical_briefing(p))
-            
-        context_str = "\n\n---\n\n".join(briefings)
-        
+
+        # Vault-wide semantic search (keyword-agnostic)
+        semantic = self.get_semantic_context(prompt)
+        if semantic:
+            briefings.append(semantic)
+
+        context_str = "\n\n---\n\n".join(briefings) if briefings else ""
+
         response = {
             "hookSpecificOutput": {
                 "additionalContext": context_str
             }
         }
-        
+
         return json.dumps(response)
