@@ -25,7 +25,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .config import print_config, VAULT_PATH
 from .db import init_db, get_last_index_time, get_all_repo_mappings, get_repo_mapping
-from .indexer import build_index, get_files_to_index
+from .indexer import build_index, get_files_to_index, index_single_note
 from .repo_manager import load_mappings_from_yaml, verify_mapping
 from .onboarding import onboard_project_logic, update_project_index
 from .strategy import generate_daily_strategy_logic
@@ -39,6 +39,8 @@ from .pulse import (
     format_pulse_markdown,
 )
 from . import tools
+from . import dev_log
+from . import hooks
 
 # =============================================================================
 # MCP SERVER SETUP
@@ -331,6 +333,34 @@ def load_repo_mappings(yaml_path: str | None = None) -> str:
         return f"**Error loading mappings:** {e}"
 
 
+def _build_pulse_summary(filename: str, data: dict) -> str:
+    """Build a summary string for the Dev Log."""
+    summary = [f"**Pulse Scan**: [[{filename}]]"]
+    
+    # Git stats
+    git = data.get("git", {})
+    if "repos" in git:
+        repo_count = len(git["repos"])
+        dirty_count = sum(1 for r in git["repos"] if r.get("dirty"))
+        status = "🔴 Dirty" if dirty_count else "🟢 Clean"
+        summary.append(f"- **Git**: {repo_count} repos, {status}")
+
+    # GitHub stats
+    gh = data.get("github", {})
+    prs = len(gh.get("prs", []))
+    issues = len(gh.get("issues", []))
+    if prs or issues:
+        summary.append(f"- **GitHub**: {prs} PRs, {issues} Issues")
+
+    # Jira stats
+    jira = data.get("jira", {})
+    tickets = len(jira.get("tickets", []))
+    if tickets:
+        summary.append(f"- **Jira**: {tickets} Tickets")
+
+    return "\n".join(summary)
+
+
 @mcp.tool()
 def list_repo_mappings() -> str:
     """
@@ -460,12 +490,11 @@ def pulse_scan(project_name: str, force: bool = False) -> str:
     try:
         project_vault_dir.mkdir(parents=True, exist_ok=True)
         target_path.write_text(markdown, encoding="utf-8")
+        index_single_note(target_path) # Index the new note
 
-        # Also append link to Dev Log if it exists
-        dev_log_path = project_vault_dir / "Dev Log.md"
-        if dev_log_path.exists():
-            with open(dev_log_path, "a") as f:
-                f.write(f"\n- [[{filename}|Pulse Scan - {today}]]")
+        # Also append to Dev Log if it exists
+        summary = _build_pulse_summary(filename, data)
+        dev_log.append_to_dev_log(project_vault_dir, summary)
 
         return f"✅ Pulse scan saved to: {target_path.relative_to(VAULT_PATH)}"
     except Exception as e:
@@ -500,11 +529,33 @@ def onboard_project(repo_path: str, project_name: str, force: bool = False) -> s
         dev_log_path.write_text(content, encoding="utf-8")
 
         # Phase 3: Index update
-        index_msg = update_project_index(project_name)
+        update_project_index(project_name)
 
-        return f"✅ Onboarding complete!\n- Created: {dev_log_path.relative_to(VAULT_PATH)}\n- {index_msg}"
+        return f"✅ Onboarding complete!\n- Created: {dev_log_path.relative_to(VAULT_PATH)}\n- Project index updated."
     except Exception as e:
         return f"❌ Onboarding failed: {e}"
+
+
+@mcp.tool()
+def append_to_dev_log(project_name: str, content: str, title: str | None = None) -> str:
+    """
+    Append an entry to a project's Dev Log.
+    
+    Args:
+        project_name: Vault path of the project (e.g. '10_Projects/OVI')
+        content: Markdown content to append
+        title: Optional title for the entry
+    """
+    mapping = get_repo_mapping(project_name)
+    if not mapping:
+        return f"❌ Project '{project_name}' not found in repo mappings."
+    
+    project_vault_dir = VAULT_PATH / mapping["vault_path"]
+    try:
+        path = dev_log.append_to_dev_log(project_vault_dir, content, title)
+        return f"✅ Appended to {path.relative_to(VAULT_PATH)}"
+    except Exception as e:
+        return f"❌ Error appending to log: {e}"
 
 
 @mcp.tool()
@@ -623,6 +674,11 @@ Examples:
         help="Run a pulse scan for a project (vault_path)",
     )
     parser.add_argument(
+        "--dev-log",
+        metavar="PROJECT",
+        help="Show action items for a project",
+    )
+    parser.add_argument(
         "--strategy",
         action="store_true",
         help="Generate Daily Strategy based on recent activity",
@@ -636,6 +692,11 @@ Examples:
         "--deep-onboard",
         metavar="PATH",
         help="Run deep onboarding for a repository path",
+    )
+    parser.add_argument(
+        "--context-hook",
+        metavar="PROMPT",
+        help="Run ContextEngine hook (outputs JSON)",
     )
     parser.add_argument("-q", "--quiet", action="store_true", help="Suppress verbose output")
 
@@ -676,6 +737,34 @@ Examples:
         print(pulse_scan(args.pulse, force=True))
         return
 
+        print(pulse_scan(args.pulse, force=True))
+        return
+
+    # Dev Log action items
+    if args.dev_log:
+        init_db()
+        mapping = get_repo_mapping(args.dev_log)
+        if not mapping:
+             print(f"❌ Project '{args.dev_log}' not found in repo mappings.")
+             return
+        
+        path = VAULT_PATH / mapping["vault_path"] / "Dev Log.md"
+        if not path.exists():
+            print(f"❌ Dev Log not found at {path}")
+            return
+            
+        try:
+            content = path.read_text(encoding="utf-8")
+            items = dev_log.extract_action_items(content)
+            print(f"🏗️  Action Items for {args.dev_log}:")
+            if not items:
+                print("   (No open items found)")
+            for item in items:
+                print(f"   {item}")
+        except Exception as e:
+             print(f"❌ Error reading log: {e}")
+        return
+
     # Strategy generation
     if args.strategy:
         init_db()
@@ -699,6 +788,13 @@ Examples:
         # User can add a --force flag if we added one.
         # Let's add a global --force flag.
         print(deep_onboard(args.deep_onboard, force=getattr(args, "force", False)))
+        return
+
+    # Context Hook
+    if args.context_hook:
+        init_db()
+        engine = hooks.ContextEngine()
+        print(engine.get_context(args.context_hook))
         return
 
     # Run indexer

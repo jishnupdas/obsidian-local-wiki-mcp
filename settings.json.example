@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "beforeAgent": {
+      "command": [
+        "uv",
+        "run",
+        "--directory",
+        "/home/jishnu/Projects/obsidian-mcp",
+        "obsidian-mcp",
+        "--context-hook",
+        "${prompt}"
+      ]
+    }
+  }
+}
