@@ -219,6 +219,45 @@ def vault_stats() -> str:
 
 
 @mcp.tool()
+async def open_in_obsidian(filename: str = "") -> str:
+    """
+    Open a specific note directly in the Obsidian UI.
+
+    Args:
+        filename: Note filename or path to open. If empty, opens today's daily note.
+    """
+    return await tools.open_in_obsidian(filename)
+
+
+@mcp.tool()
+async def obsidian_search_native(query: str, context: bool = True) -> str:
+    """
+    Execute a native search across the vault using the Obsidian app's search engine.
+    This allows using native Obsidian search syntax (e.g., tag:#foo path:bar) and natively understands aliases/metadata.
+
+    Args:
+        query: Search term or phrase using Obsidian query syntax
+        context: If True, returns matching lines snippet. If False, just file list.
+    """
+    return await tools.obsidian_search_native(query, context)
+
+
+@mcp.tool()
+async def get_graph_context(note_path: str) -> str:
+    """
+    Get perfect 1-depth structural graph connections (outlinks and backlinks) for a note.
+    
+    This uses Obsidian's native JavaScript APIs to provide 100% accurate Markdown link resolution, 
+    unlike `find_related_notes` which provides semantic/LLM-derived relationship claims.
+
+    Args:
+        note_path: The file path of the note relative to the vault (e.g., '10_Projects/Ovi.md').
+                   If the `.md` extension is omitted, it will be added automatically.
+    """
+    return await tools.get_graph_context(note_path)
+
+
+@mcp.tool()
 def index_vault(
     query: str | None = None,
     pattern: str | None = None,

@@ -25,9 +25,9 @@ from .db import (
     get_orphan_notes,
     get_most_connected,
     search_vectors,
-    get_vector_count,
 )
 from . import vectors
+from .cli import run_obsidian_cli
 
 
 # =============================================================================
@@ -653,6 +653,131 @@ To apply this change, call again with force=True"""
         return f"✅ Linked '{text_to_link}' → `{replacement}` in {filename} ({count} occurrence(s))"
     except Exception as e:
         return f"❌ Error applying wikilink: {e}"
+
+
+# =============================================================================
+# TOOL 10: GRAPH CONTEXT (VIA OBSIDIAN JS)
+# =============================================================================
+
+async def get_graph_context(note_path: str) -> str:
+    """
+    Get perfect 1-depth structural graph connections (outlinks and backlinks) for a note.
+    
+    This uses Obsidian's native `app.metadataCache.resolvedLinks` to provide 100% accurate
+    Markdown link resolution, unlike `find_related_notes` which provides semantic/LLM claims.
+
+    Args:
+        note_path: The file path of the note relative to the vault (e.g., '10_Projects/Ovi.md').
+                   If the `.md` extension is omitted, it will be added automatically.
+
+    Returns:
+        JSON string containing the note's outlinks and backlinks.
+    """
+    import json
+    
+    if not note_path.endswith(".md"):
+        note_path += ".md"
+        
+    # We construct a focused API script to extract just what we need natively.
+    # No arbitrary execution from the AI agent is allowed here.
+    js_script = f"""
+    (() => {{
+        const target = "{note_path}";
+        const resolved = app.metadataCache.resolvedLinks;
+        
+        // Outlinks: what target links to
+        const outlinks = Object.keys(resolved[target] || {{}});
+        
+        // Backlinks: what links to target
+        const backlinks = [];
+        for (const [source, links] of Object.entries(resolved)) {{
+            if (target in links) {{
+                backlinks.push(source);
+            }}
+        }}
+        
+        return JSON.stringify({{
+            target: target,
+            outlinks: outlinks,
+            backlinks: backlinks
+        }});
+    }})();
+    """
+    
+    returncode, stdout, stderr = await run_obsidian_cli("eval", f"code={js_script}")
+    if returncode == 0:
+        try:
+            # Obsidian's eval command prefixes output with "=> "
+            clean_out = stdout.strip()
+            if clean_out.startswith("=> "):
+                clean_out = clean_out[3:]
+                
+            data = json.loads(clean_out)
+            
+            lines = [f"=== GRAPH CONTEXT FOR: {data['target']} ==="]
+            
+            lines.append(f"\n-- Outlinks ({len(data['outlinks'])}) --")
+            for link in data['outlinks']:
+                lines.append(f"  → {link}")
+                
+            lines.append(f"\n-- Backlinks ({len(data['backlinks'])}) --")
+            for link in data['backlinks']:
+                lines.append(f"  ← {link}")
+                
+            return "\n".join(lines)
+        except json.JSONDecodeError:
+            return f"Failed to parse JS result. Raw output:\n{stdout}"
+            
+    return f"Graph Context Error. Exit code: {returncode}.\nStderr: {stderr}"
+
+
+# =============================================================================
+# TOOL 11: OPEN IN OBSIDIAN (VIA CLI)
+# =============================================================================
+
+async def open_in_obsidian(filename: str = "") -> str:
+    """
+    Open a specific note directly in the Obsidian UI.
+
+    Args:
+        filename: Note filename or path to open. If empty, opens today's daily note.
+    """
+    if not filename:
+        returncode, stdout, stderr = await run_obsidian_cli("daily")
+        if returncode == 0:
+            return "✅ Successfully opened today's daily note in Obsidian."
+        return f"❌ Failed to open daily note. Exit code: {returncode}. Stderr: {stderr}"
+        
+    if not filename.endswith(".md"):
+        filename += ".md"
+        
+    returncode, stdout, stderr = await run_obsidian_cli("open", f"file={filename}")
+    if returncode == 0:
+        return f"✅ Successfully opened '{filename}' in Obsidian."
+    return f"❌ Failed to open note. Exit code: {returncode}. Stderr: {stderr}"
+
+
+# =============================================================================
+# TOOL 12: OBSIDIAN NATIVE SEARCH (VIA CLI)
+# =============================================================================
+
+async def obsidian_search_native(query: str, context: bool = True) -> str:
+    """
+    Execute a native search across the vault using the Obsidian app's search engine.
+    This allows using native Obsidian search syntax (e.g., tag:#foo path:bar) and natively understands aliases/metadata.
+
+    Args:
+        query: Search term or phrase using Obsidian query syntax
+        context: If True, returns matching lines snippet. If False, just file list.
+    """
+    command = "search:context" if context else "search"
+    
+    returncode, stdout, stderr = await run_obsidian_cli(command, f"query={query}")
+    if returncode == 0:
+        if not stdout.strip():
+            return f"No results found for native query: '{query}'"
+        return f"=== NATIVE OBSIDIAN SEARCH RESULTS ===\n{stdout}"
+    return f"❌ Native search failed. Exit code: {returncode}. Stderr: {stderr}"
 
 
 # =============================================================================
