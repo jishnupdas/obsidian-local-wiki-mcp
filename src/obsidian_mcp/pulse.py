@@ -9,6 +9,8 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 
+from .config import JIRA_BASE_URL
+
 
 def run_command(cmd: list, cwd: Optional[Path] = None, timeout: int = 15) -> str:
     """Run a shell command and return output."""
@@ -330,7 +332,7 @@ def format_pulse_markdown(project_name: str, data: Dict[str, Any]) -> str:
             status = fields.get("status", {}).get("name", "Unknown")
             priority = fields.get("priority", {}).get("name", "Normal")
             lines.append(
-                f"| [{t['key']}](https://accurkardia.atlassian.net/browse/{t['key']}) | {summary} | `{status}` | {priority} |"
+                f"| [{t['key']}]({JIRA_BASE_URL}/browse/{t['key']}) | {summary} | `{status}` | {priority} |"
             )
         lines.append("")
 

@@ -666,7 +666,7 @@ Examples:
   obsidian-mcp --load-mappings    # Load repo mappings from YAML
   obsidian-mcp --list-mappings    # List configured repo mappings
   obsidian-mcp --verify-mappings  # Verify repo mapping configuration
-  obsidian-mcp --pulse "10_Projects/Accurkardia" # Run project pulse scan
+  obsidian-mcp --pulse "10_Projects/MyProject" # Run project pulse scan
   obsidian-mcp --strategy         # Generate Daily Strategy note
   obsidian-mcp --gaps             # Run gap analysis
   obsidian-mcp --deep-onboard "." # Deep onboard current directory
