@@ -670,6 +670,9 @@ Examples:
   obsidian-mcp --strategy         # Generate Daily Strategy note
   obsidian-mcp --gaps             # Run gap analysis
   obsidian-mcp --deep-onboard "." # Deep onboard current directory
+  obsidian-mcp --graph "Note.md"  # Get 1-depth graph context
+  obsidian-mcp --native-search "tag:#foo" # Obsidian native search
+  obsidian-mcp --open "Note.md"   # Open note in Obsidian UI
 """,
     )
 
@@ -741,6 +744,21 @@ Examples:
         "--search",
         metavar="QUERY",
         help="Search the vault and print results (uses hybrid search)",
+    )
+    parser.add_argument(
+        "--native-search",
+        metavar="QUERY",
+        help="Execute native Obsidian search query and print context",
+    )
+    parser.add_argument(
+        "--graph",
+        metavar="NOTE",
+        help="Get structural graph context (outlinks/backlinks) for a note",
+    )
+    parser.add_argument(
+        "--open",
+        metavar="NOTE",
+        help="Open a specific note directly in the Obsidian UI",
     )
     parser.add_argument(
         "--semantic",
@@ -857,6 +875,24 @@ Examples:
         init_db()
         engine = hooks.ContextEngine()
         print(engine.get_context(args.context_hook))
+        return
+
+    # Native search
+    if args.native_search:
+        import asyncio
+        print(asyncio.run(tools.obsidian_search_native(args.native_search, context=True)))
+        return
+
+    # Graph context
+    if args.graph:
+        import asyncio
+        print(asyncio.run(tools.get_graph_context(args.graph)))
+        return
+
+    # Open in Obsidian
+    if args.open:
+        import asyncio
+        print(asyncio.run(tools.open_in_obsidian(args.open)))
         return
 
     # Run indexer
