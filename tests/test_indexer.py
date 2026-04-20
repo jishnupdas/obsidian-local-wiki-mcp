@@ -81,7 +81,7 @@ def test_build_index_integration(tmp_vault, tmp_db, mock_config):
         "claim": "Test claim"
     }]
     
-    with patch("obsidian_mcp.indexer.call_gemini_cli", return_value=mock_response):
+    with patch("obsidian_mcp.indexer.call_llm_extract", return_value=mock_response):
         stats = indexer.build_index(full_rebuild=True, verbose=False)
         
         # 2 files: Test.md + Concept Note.md (from tmp_vault fixture)

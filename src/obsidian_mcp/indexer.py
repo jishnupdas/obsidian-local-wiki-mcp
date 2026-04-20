@@ -1,5 +1,5 @@
 """
-Knowledge Graph Indexer using Gemini CLI.
+Knowledge Graph Indexer.
 
 The Heartbeat: A background process that reads your vault and builds a
 semantic knowledge graph by extracting claims and connections via LLM.
@@ -7,7 +7,6 @@ semantic knowledge graph by extracting claims and connections via LLM.
 Supports incremental indexing (only re-processes changed files).
 """
 
-import subprocess
 import json
 import re
 from pathlib import Path
@@ -15,11 +14,12 @@ from datetime import datetime
 
 from .config import (
     VAULT_PATH,
-    GEMINI_MODEL,
+    LLM_MODEL,
     BATCH_SIZE,
     EXCLUDE_PATTERNS,
     RELATIONSHIP_TYPES,
 )
+from .llm import call_llm
 from .db import (
     init_db,
     get_content_hash,
@@ -75,13 +75,13 @@ EXTRACTION_PROMPT = _build_extraction_prompt()
 
 
 # =============================================================================
-# GEMINI CLI INTEGRATION
+# LLM INTEGRATION
 # =============================================================================
 
 
-def call_gemini_cli(content: str, timeout: int = 120) -> list | None:
+def call_llm_extract(content: str, timeout: int = 120) -> list | None:
     """
-    Call Gemini CLI for claim/connection extraction.
+    Call the configured LLM for claim/connection extraction.
 
     Args:
         content: Batch of notes to analyze
@@ -90,54 +90,29 @@ def call_gemini_cli(content: str, timeout: int = 120) -> list | None:
     Returns:
         List of extracted items or None on error
     """
-    cmd = [
-        "gemini",
-        "--model",
-        GEMINI_MODEL,
-    ]
-
     full_input = f"{EXTRACTION_PROMPT}\n\n---\nNOTES TO ANALYZE:\n---\n\n{content}"
-    proc = None
 
     try:
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        stdout, stderr = proc.communicate(input=full_input, timeout=timeout)
-
-        if proc.returncode != 0:
-            print(f"  ⚠️  Gemini CLI error (code {proc.returncode}): {stderr[:200]}")
-            return None
-
-        # Parse response - Gemini CLI returns raw text, not JSON wrapper
-        raw = stdout.strip()
-
-        # Clean markdown code blocks if present
-        raw = re.sub(r"^```json\s*", "", raw)
-        raw = re.sub(r"^```\s*", "", raw)
-        raw = re.sub(r"\s*```$", "", raw)
-        raw = raw.strip()
-
-        # Find JSON array in response
-        json_match = re.search(r"\[[\s\S]*\]", raw)
-        if json_match:
-            raw = json_match.group(0)
-
-        return json.loads(raw)
-
-    except subprocess.TimeoutExpired:
-        if proc:
-            proc.kill()
-        print(f"  ⚠️  Gemini CLI timeout after {timeout}s")
+        raw = call_llm(full_input, timeout=timeout)
+    except RuntimeError as e:
+        print(f"  ⚠️  LLM error: {e}")
         return None
+
+    # Clean markdown code blocks if present
+    raw = re.sub(r"^```json\s*", "", raw)
+    raw = re.sub(r"^```\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    raw = raw.strip()
+
+    # Find JSON array in response
+    json_match = re.search(r"\[[\s\S]*\]", raw)
+    if json_match:
+        raw = json_match.group(0)
+
+    try:
+        return json.loads(raw)
     except json.JSONDecodeError as e:
         print(f"  ⚠️  JSON parse error: {e}")
-        return None
-    except FileNotFoundError:
-        print("  ❌ Gemini CLI not found. Install with: npm install -g @google/gemini-cli")
-        return None
-    except Exception as e:
-        print(f"  ⚠️  Unexpected error: {type(e).__name__}: {e}")
         return None
 
 
@@ -294,7 +269,7 @@ def build_index(
     if verbose:
         print("🧠 Obsidian MCP Indexer")
         print(f"   Vault: {VAULT_PATH}")
-        print(f"   Model: {GEMINI_MODEL}")
+        print(f"   Model: {LLM_MODEL}")
         mode_desc = "Full Rebuild" if full_rebuild else "Incremental"
         if file_list is not None:
             mode_desc = f"Targeted ({len(file_list)} files)"
@@ -416,7 +391,7 @@ def build_index(
                         f"   🔄 Processing batch ({len(batch_buffer)} notes, {batch_size // 1000}KB)..."
                     )
 
-                extractions = call_gemini_cli("\n".join(batch_buffer))
+                extractions = call_llm_extract("\n".join(batch_buffer))
 
                 if extractions:
                     for item in extractions:
@@ -537,7 +512,7 @@ def index_single_note(filepath: str | Path, verbose: bool = False) -> dict | Non
 
         # LLM extraction for single note
         tagged = f'<note filename="{filename}" path="{rel_path}">\n{content}\n</note>'
-        extractions = call_gemini_cli(tagged)
+        extractions = call_llm_extract(tagged)
 
         if extractions:
             for item in extractions:

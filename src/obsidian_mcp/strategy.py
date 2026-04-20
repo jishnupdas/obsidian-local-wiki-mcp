@@ -2,10 +2,10 @@
 Strategy Module - Generates Daily Strategy based on project activity.
 """
 
-import subprocess
 from datetime import datetime
 from pathlib import Path
-from .config import VAULT_PATH, GEMINI_MODEL
+from .config import VAULT_PATH
+from .llm import call_llm
 
 
 def get_strategy_prompt(date_str: str) -> str:
@@ -38,23 +38,13 @@ Output Format (Markdown):
 """
 
 
-def call_gemini_strategy(context: str, date_str: str) -> str:
-    """Call Gemini CLI to generate strategy."""
-    cmd = ["gemini", "--model", GEMINI_MODEL]
+def call_llm_strategy(context: str, date_str: str) -> str:
+    """Call the configured LLM to generate strategy."""
     full_input = f"{get_strategy_prompt(date_str)}\n\nCONTEXT:\n{context}"
-
     try:
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        stdout, stderr = proc.communicate(input=full_input, timeout=60)
-
-        if proc.returncode != 0:
-            return f"Error generating strategy: {stderr}"
-
-        return stdout.strip()
-    except Exception as e:
-        return f"Error calling Gemini: {e}"
+        return call_llm(full_input, timeout=60)
+    except RuntimeError as e:
+        return f"Error generating strategy: {e}"
 
 
 def generate_daily_strategy_logic(force: bool = False) -> str:
@@ -103,7 +93,7 @@ def generate_daily_strategy_logic(force: bool = False) -> str:
         return "No readable Pulse Scans found."
 
     # Generate Strategy
-    strategy_content = call_gemini_strategy(context, today)
+    strategy_content = call_llm_strategy(context, today)
 
     # Save
     filename = f"Daily Strategy - {today}.md"

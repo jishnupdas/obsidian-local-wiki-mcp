@@ -2,14 +2,15 @@
 Deep Onboarding - Autonomous project intelligence, categorization, and merging.
 """
 
+import json
 import os
 import re
-import subprocess
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Any, List, Optional, Tuple
 
-from .config import VAULT_PATH, GEMINI_MODEL
+from .config import VAULT_PATH
+from .llm import call_llm
 from .pulse import gather_git_info, gather_structural_info, run_command
 from .db import get_db, upsert_note
 from .indexer import extract_wikilinks
@@ -68,14 +69,8 @@ OUTPUT FORMAT (JSON):
 # =============================================================================
 
 
-def call_gemini_architect(
-    project_name: str, repo_path: str, data: Dict[str, Any]
-) -> Dict[str, Any]:
-    """Call Gemini to analyze project structure."""
-    import json
-
-    # Format data for LLM
-    analysis_str = f"""
+def _format_analysis(data: Dict[str, Any]) -> str:
+    return f"""
     - Path Context: {data.get("path_context", "Unknown")}
     - Manifests: {", ".join(data.get("manifests", []))}
     - Languages inferred: {data.get("languages", "Unknown")}
@@ -85,59 +80,63 @@ def call_gemini_architect(
     - File Extensions: {data.get("extensions", [])}
     """
 
-    prompt = ARCHITECT_PROMPT.format(
-        project_name=project_name, repo_path=repo_path, analysis_data=analysis_str
-    )
 
-    cmd = ["gemini", "--model", GEMINI_MODEL, "--output-format", "json"]
+def _parse_architect_response(raw: str) -> Dict[str, Any]:
+    """Parse LLM response into architect dict.
+
+    Handles plain JSON, markdown-fenced JSON, and the legacy Gemini CLI
+    --output-format json wrapper: {"response": "...", "session_id": "...", "stats": {}}.
+    """
+    clean = raw.strip()
+    for prefix in ("```json", "```"):
+        if clean.startswith(prefix):
+            clean = clean[len(prefix):]
+            break
+    if clean.endswith("```"):
+        clean = clean[:-3]
+    clean = clean.strip()
+
+    idx = clean.find("{")
+    if idx == -1:
+        return {"error": f"No JSON object found in LLM response: {clean[:200]}"}
+    clean = clean[idx:]
 
     try:
-        proc = subprocess.Popen(
-            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-        )
-        stdout, stderr = proc.communicate(input=prompt, timeout=60)
+        parsed = json.loads(clean)
+    except json.JSONDecodeError as e:
+        return {"error": f"JSON parse error: {e}"}
 
-        if proc.returncode != 0:
-            return {"error": f"Gemini error: {stderr}"}
+    # Handle legacy Gemini --output-format json wrapper
+    if "response" in parsed and isinstance(parsed["response"], str):
+        inner = parsed["response"].strip()
+        for prefix in ("```json", "```"):
+            if inner.startswith(prefix):
+                inner = inner[len(prefix):]
+                break
+        if inner.endswith("```"):
+            inner = inner[:-3]
+        try:
+            return json.loads(inner.strip())
+        except json.JSONDecodeError:
+            pass
 
-        # Parse JSON output - handle Gemini CLI wrapper format
-        clean_json = stdout.strip()
+    return parsed
 
-        # Find first {
-        idx = clean_json.find("{")
-        if idx != -1:
-            clean_json = clean_json[idx:]
 
-        # Handle markdown code blocks at wrapper level
-        if clean_json.startswith("```json"):
-            clean_json = clean_json[7:]
-        if clean_json.endswith("```"):
-            clean_json = clean_json[:-3]
-
-        # Parse the wrapper JSON from Gemini CLI
-        wrapper = json.loads(clean_json)
-
-        # Gemini CLI returns {"response": "...", "session_id": "...", "stats": {...}}
-        # Extract and parse the actual response (double parse required)
-        if "response" in wrapper:
-            response_str = wrapper["response"]
-
-            # Handle markdown code blocks in the response field itself
-            response_str = response_str.strip()
-            if response_str.startswith("```json"):
-                response_str = response_str[7:]
-            elif response_str.startswith("```"):
-                response_str = response_str[3:]
-            if response_str.endswith("```"):
-                response_str = response_str[:-3]
-
-            return json.loads(response_str.strip())
-        else:
-            # Fallback: assume it's already the raw response (for compatibility)
-            return wrapper
-
-    except Exception as e:
-        return {"error": f"LLM processing failed: {e}"}
+def call_llm_architect(
+    project_name: str, repo_path: str, data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Call the configured LLM to analyze project structure."""
+    prompt = ARCHITECT_PROMPT.format(
+        project_name=project_name,
+        repo_path=repo_path,
+        analysis_data=_format_analysis(data),
+    )
+    try:
+        raw = call_llm(prompt, timeout=60)
+    except RuntimeError as e:
+        return {"error": str(e)}
+    return _parse_architect_response(raw)
 
 
 def fuzzy_match_concept(concept: str) -> str:
@@ -390,7 +389,7 @@ def deep_onboard_logic(repo_path: str, project_name: str | None = None, force: b
     }
 
     # 2. Intelligence
-    analysis = call_gemini_architect(project_name, str(path), discovery_data)
+    analysis = call_llm_architect(project_name, str(path), discovery_data)
 
     if "error" in analysis:
         return f"Analysis failed: {analysis['error']}"
