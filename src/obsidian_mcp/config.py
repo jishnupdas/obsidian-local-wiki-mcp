@@ -35,6 +35,16 @@ DB_PATH = _get_path("DB_PATH", "~/Projects/project-sb/.obsidian/vault_graph.db")
 # =============================================================================
 
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3-flash-preview")
+
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")
+
+_DEFAULT_MODELS: dict[str, str] = {
+    "gemini": os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),  # backward-compat alias
+    "claude": "claude-sonnet-4-5",
+    "openai": "gpt-4o-mini",
+}
+LLM_MODEL = os.getenv("LLM_MODEL") or _DEFAULT_MODELS.get(LLM_PROVIDER.lower(), "gemini-2.5-flash")
+
 BATCH_SIZE = _get_int("BATCH_SIZE", 25000)  # Characters per batch
 
 # Paths to exclude from indexing (relative to vault root)
@@ -111,7 +121,9 @@ RELATIONSHIP_TYPES = {
 CONFIG = {
     "vault_path": VAULT_PATH,
     "db_path": DB_PATH,
-    "gemini_model": GEMINI_MODEL,
+    "gemini_model": GEMINI_MODEL,  # kept for backward compat
+    "llm_provider": LLM_PROVIDER,
+    "llm_model": LLM_MODEL,
     "batch_size": BATCH_SIZE,
     "exclude_patterns": EXCLUDE_PATTERNS,
     "templates": TEMPLATES,
@@ -128,7 +140,8 @@ def print_config():
     print("=== Obsidian MCP Configuration ===")
     print(f"  Vault Path:      {VAULT_PATH}")
     print(f"  Database:        {DB_PATH}")
-    print(f"  Gemini Model:    {GEMINI_MODEL}")
+    print(f"  LLM Provider:    {LLM_PROVIDER}")
+    print(f"  LLM Model:       {LLM_MODEL}")
     print(f"  Batch Size:      {BATCH_SIZE} chars")
     print(f"  Journal:         {JOURNAL_FOLDER}/")
     print(f"  Excluded:        {', '.join(EXCLUDE_PATTERNS)}")
