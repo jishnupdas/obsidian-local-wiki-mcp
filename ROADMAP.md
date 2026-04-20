@@ -427,6 +427,5 @@ Chain-of-thought reasoning across multiple vault notes with full citation tracki
 
 ---
 
-**Last Updated:** 2026-02-20
+**Last Updated:** 2026-04-19
 **Version:** 0.3.0
-**Maintainer:** Jishnu

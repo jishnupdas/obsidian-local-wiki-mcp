@@ -5,7 +5,7 @@ description = "MCP server for Obsidian Second Brain integration with Gemini CLI 
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-authors = [{ name = "Jishnu" }]
+authors = []
 dependencies = [
     "mcp>=1.0.0",
     "python-dotenv>=1.0.0",

@@ -49,6 +49,7 @@ EXCLUDE_PATTERNS = [
 # =============================================================================
 
 JOURNAL_FOLDER = os.getenv("JOURNAL_FOLDER", "50_Journal")
+JIRA_BASE_URL = os.getenv("JIRA_BASE_URL", "")
 JOURNAL_DATE_FORMAT = os.getenv("JOURNAL_DATE_FORMAT", "%Y-%m-%d")
 
 # =============================================================================

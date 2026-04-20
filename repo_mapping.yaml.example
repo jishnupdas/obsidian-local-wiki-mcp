@@ -10,25 +10,25 @@
 #   3. Run: obsidian-mcp --load-mappings
 
 mappings:
-  # Example: OVI Project
-  - vault_path: "10_Projects/OVI"
-    repo_path: "~/Projects/dev/ovi"
-    github: "anomalyco/ovi"
+  # Example: A project with GitHub and Jira integration
+  - vault_path: "10_Projects/ProjectAlpha"
+    repo_path: "~/Projects/project-alpha"
+    github: "your-org/project-alpha"
+    jira_project: "PA"
+    description: "My primary development project"
+    active: true
+
+  # Example: A project with GitHub only (no Jira)
+  - vault_path: "10_Projects/ProjectBeta"
+    repo_path: "~/Projects/project-beta"
+    github: "your-org/project-beta"
     jira_project: null
-    description: "One Vault Interface - Knowledge management system"
+    description: "Side project or open source contribution"
     active: true
 
-  # Example: Accurkardia
-  - vault_path: "10_Projects/Accurkardia"
-    repo_path: "~/Projects/dev/accurkardia"
-    github: "anomalyco/accurkardia"
-    jira_project: "AK"
-    description: "Cardiac monitoring platform"
-    active: true
-
-  # Example: Personal Dev Dashboard (no Jira)
-  - vault_path: "10_Projects/Personal Dev Dashboard"
-    repo_path: "~/Projects/dev/personal-dashboard"
+  # Example: A local-only project (no GitHub or Jira)
+  - vault_path: "10_Projects/PersonalDashboard"
+    repo_path: "~/Projects/personal-dashboard"
     github: null
     jira_project: null
     description: "Personal productivity tracking dashboard"
@@ -38,5 +38,5 @@ mappings:
 # - vault_path: Relative to vault root (e.g., "10_Projects/MyProject")
 # - repo_path: Absolute path or ~/ path to local git repo
 # - github: Format "owner/repo" or null if not on GitHub
-# - jira_project: Jira project key (e.g., "AK", "OVI") or null
-# - active: Set to false to ignore inactive projects
+# - jira_project: Jira project key (e.g., "PA", "PROJ") or null
+# - active: Set to false to exclude a project from pulse scans

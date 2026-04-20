@@ -5,7 +5,7 @@
         "uv",
         "run",
         "--directory",
-        "/home/jishnu/Projects/obsidian-mcp",
+        "/path/to/obsidian-local-wiki-mcp",
         "obsidian-mcp",
         "--context-hook",
         "${prompt}"
